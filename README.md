@@ -71,9 +71,10 @@ Both produce one named check per section. Pick whichever you prefer — **the ma
 
 | Input | Required | Default | Meaning |
 |---|---|---|---|
-| `section` | yes | — | `dockerfile`, `hardening`, `compose`, `wiremock` or `networks` |
-| `path` | no | `lab-01` | the lab folder to grade |
+| `section` | yes | — | lab 1: `dockerfile`, `hardening`, `compose`, `wiremock`, `networks` · lab 2: `tests`, `pipeline`, `published-image`, `cache` |
+| `path` | no | the lab's own folder | the lab folder to grade |
 | `port` | no | `8080` | the host port the app must be published on |
+| `token` | no | `${{ github.token }}` | lab 2 only — the `cache` section asks the Actions cache API which caches the repository really holds, so the calling job needs `permissions: actions: read` |
 
 Outputs: `pass`, `fail`, `warn`, `score`. `fail` is zero when the section is clean.
 
@@ -92,6 +93,16 @@ meaningless.
 | `compose` | Compose parses, Postgres is health-gated and unpublished, **the data survives `down`/`up`** | 1 · section 3 |
 | `wiremock` | the partner stub answers, and its 500 surfaces as a 502 | 1 · bonus |
 | `networks` | networks are explicit, `internal: true` holds, the database has no egress | 1 · bonus |
+| `tests` | the suite runs, passes, imports the app, and **goes red when the app is broken on purpose** | 2 · section 1 |
+| `pipeline` | test → build → publish in one workflow, publishing **gated** behind the tests, no `latest`, revision labelled | 2 · section 2 |
+| `published-image` | the grader stops building and **pulls**: by digest, runs it, probes it, and checks the revision label names a commit in that repository | 2 · section 3 |
+| `cache` | a cache keyed on something that changes, **an entry the Actions cache API hands back by key and id**, not empty, and two timings in `CACHE.md` | 2 · bonus |
+
+`cache` is the one section that asks GitHub a question rather than reading a file. A `cache:` block
+that saved nothing is still perfect YAML, so the check lists `/repos/{owner}/{repo}/actions/caches`,
+takes the newest entry, asks for it **again by its own key and ref**, and requires the same id back
+with a non-trivial size. Without `actions: read` it reports a warning rather than a failure — it is
+a bonus section, and a missing permission is not a wrong answer.
 
 **Secret checks run in every section**, because a leaked credential is never bonus:
 
@@ -115,6 +126,13 @@ asserted — which is the point. To run it by hand while authoring or debugging 
 ```bash
 git clone https://github.com/kse-ci-cd-basics-course/catshop-grader
 bash catshop-grader/lab-01/verify/verify.sh --section compose --path lab-01
+```
+
+The cache API path cannot be exercised by grading a folder, so it has its own harness with a stubbed
+`curl` and five payloads:
+
+```bash
+for c in happy empty tiny noperm mismatch; do bash catshop-grader/tests/cache-api.sh "$c"; done
 ```
 
 Flags: `--json` for machine-readable output, `--keep` to leave the stack running for inspection,

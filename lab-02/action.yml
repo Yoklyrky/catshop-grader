@@ -17,6 +17,12 @@ inputs:
       The host port the published image is expected to serve on.
     required: false
     default: "8080"
+  token:
+    description: >-
+      A token with `actions: read` — the cache section asks the repository which
+      caches exist.
+    required: false
+    default: ${{ github.token }}
 
 outputs:
   pass:
@@ -40,9 +46,9 @@ runs:
       shell: bash
       env:
         PORT: ${{ inputs.port }}
+        GH_TOKEN: ${{ inputs.token }}
       run: |
-        # published-image reads the revision label and asks git whether that
-        # commit exists here, so a single-commit clone would make it meaningless
+        # published-image checks the revision label against git history
         git -C "$GITHUB_WORKSPACE" fetch --unshallow --quiet 2>/dev/null || true
         bash "${{ github.action_path }}/verify/verify.sh" \
           --section "${{ inputs.section }}" \

@@ -1,0 +1,104 @@
+# Reusable workflow — grade all of lab 2 in one call.
+#
+#   jobs:
+#     lab-02:
+#       uses: kse-ci-cd-basics-course/catshop-grader/.github/workflows/lab-02.yml@v1
+#       with:
+#         required: "tests,pipeline"        # published-image opens Thu 5 Nov
+#         bonus: "cache"
+#
+# One job per section, via the matrix. One of these per lab: `uses:` cannot take
+# an expression, so a lab-agnostic workflow could not pick its action path.
+name: lab-02
+
+on:
+  workflow_call:
+    inputs:
+      path:
+        description: "The lab folder to grade"
+        required: false
+        type: string
+        default: "lab-02"
+      required:
+        description: "Comma-separated sections that must pass"
+        required: false
+        type: string
+        default: "tests,pipeline,published-image"
+      bonus:
+        description: "Comma-separated sections that may fail without failing the lab"
+        required: false
+        type: string
+        default: "cache"
+      port:
+        description: "Host port the app is expected on"
+        required: false
+        type: string
+        default: "8080"
+
+# actions: read is what lets the cache section query the cache API.
+permissions:
+  contents: read
+  actions: read
+  packages: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      required: ${{ steps.split.outputs.required }}
+      bonus: ${{ steps.split.outputs.bonus }}
+      has_bonus: ${{ steps.split.outputs.has_bonus }}
+    steps:
+      - id: split
+        shell: bash
+        env:
+          REQUIRED: ${{ inputs.required }}
+          BONUS: ${{ inputs.bonus }}
+        run: |
+          # comma-separated input -> the JSON array a matrix consumes
+          to_json() {
+            printf '%s' "$1" | tr ',' '\n' \
+              | python3 -c 'import json,sys; print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))'
+          }
+          req="$(to_json "$REQUIRED")"
+          bon="$(to_json "$BONUS")"
+          echo "required=$req" >> "$GITHUB_OUTPUT"
+          echo "bonus=$bon"    >> "$GITHUB_OUTPUT"
+          if [ "$bon" = '[]' ]; then echo "has_bonus=false" >> "$GITHUB_OUTPUT"
+          else                       echo "has_bonus=true"  >> "$GITHUB_OUTPUT"; fi
+
+  required:
+    needs: plan
+    name: "section · ${{ matrix.section }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        section: ${{ fromJSON(needs.plan.outputs.required) }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: kse-ci-cd-basics-course/catshop-grader/lab-02@v1
+        with:
+          section: ${{ matrix.section }}
+          path: ${{ inputs.path }}
+          port: ${{ inputs.port }}
+
+  bonus:
+    needs: plan
+    if: needs.plan.outputs.has_bonus == 'true'
+    name: "section · ${{ matrix.section }} (bonus)"
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        section: ${{ fromJSON(needs.plan.outputs.bonus) }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: kse-ci-cd-basics-course/catshop-grader/lab-02@v1
+        with:
+          section: ${{ matrix.section }}
+          path: ${{ inputs.path }}
+          port: ${{ inputs.port }}

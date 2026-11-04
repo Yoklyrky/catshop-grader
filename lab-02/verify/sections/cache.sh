@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
 #
-# section: cache — bonus. Keyed on something that changes, and MEASURED.
-#
-# Lab 3 is marked on caching properly. Here it can only add, so the bar is: a
-# cache that is keyed on the lockfile rather than on nothing, and two numbers
-# that show it did something.
+# section: cache — bonus. Keyed on something that changes, measured, and proved
+# to exist via the Actions cache API.
 
 section_run() {
   sect "a cache is configured"
@@ -35,6 +32,8 @@ section_run() {
     warn "cache:mode" "layer cache without mode=max caches only the final stage"
   fi
 
+  cache_exists_in_the_repository
+
   sect "and it was measured"
   need_file CACHE.md
   [ -f CACHE.md ] || return
@@ -44,5 +43,89 @@ section_run() {
     ok "cache:measured" "two timings written down"
   else
     bad "cache:measured" "CACHE.md needs a cold run and a warm run, with both times"
+  fi
+}
+
+# A `cache:` block that saved nothing is still perfect YAML, so ask the API:
+# list the entries, take the newest, fetch it again by its own key and ref, and
+# require the same id back. Needs `actions: read`; without it, WARN not FAIL.
+cache_exists_in_the_repository() {
+  sect "the cache exists, not just the YAML"
+
+  local token="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+  local repo="${GITHUB_REPOSITORY:-}"
+  if [ -z "$token" ] || [ -z "$repo" ]; then
+    warn "cache:api" "no token or repository in the environment — run this in Actions to grade it"
+    return
+  fi
+
+  local api="https://api.github.com/repos/$repo/actions/caches"
+  local body code
+  body=$(curl -sS -w '\n%{http_code}' -m 20 \
+          -H "Authorization: Bearer $token" \
+          -H "Accept: application/vnd.github+json" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          "$api?per_page=100" 2>/dev/null)
+  code=$(tail -1 <<<"$body"); body=$(sed '$d' <<<"$body")
+
+  case "$code" in
+    200) ok "cache:api" "the cache API answered" ;;
+    403) warn "cache:api" "403 — the grading job needs permissions: actions: read"; return ;;
+    *)   warn "cache:api" "the cache API answered $code"; return ;;
+  esac
+
+  local line id key ref size count
+  line=$(python3 - "$body" <<'PY' 2>/dev/null
+import json, sys
+try:
+    entries = json.loads(sys.argv[1]).get("actions_caches", [])
+except Exception:
+    entries = []
+if entries:
+    e = sorted(entries, key=lambda c: c.get("created_at", ""))[-1]
+    print("\t".join(str(e.get(k, "")) for k in ("id", "key", "ref", "size_in_bytes")))
+print(f"COUNT\t{len(entries)}")
+PY
+)
+  count=$(sed -n 's/^COUNT\t//p' <<<"$line")
+  IFS=$'\t' read -r id key ref size <<<"$(grep -v '^COUNT' <<<"$line" | head -1)"
+
+  if [ "${count:-0}" -eq 0 ]; then
+    bad "cache:entry" "the repository has no cache entries — the save step never ran, or the job failed before it"
+    return
+  fi
+  ok "cache:entry" "${count} cache entr$([ "$count" = 1 ] && echo y || echo ies) in this repository"
+
+  [ -n "$key" ] && ok "cache:named" "newest is '$key' on $ref" \
+                || { bad "cache:named" "an entry with no key"; return; }
+
+  local again aid acode
+  again=$(curl -sS -w '\n%{http_code}' -m 20 \
+           -H "Authorization: Bearer $token" \
+           -H "Accept: application/vnd.github+json" \
+           -H "X-GitHub-Api-Version: 2022-11-28" \
+           --get --data-urlencode "key=$key" --data-urlencode "ref=$ref" \
+           "$api" 2>/dev/null)
+  acode=$(tail -1 <<<"$again"); again=$(sed '$d' <<<"$again")
+  if [ "$acode" = 200 ]; then
+    aid=$(python3 - "$again" "$id" <<'PY' 2>/dev/null
+import json, sys
+try:
+    entries = json.loads(sys.argv[1]).get("actions_caches", [])
+except Exception:
+    entries = []
+print(next((str(e["id"]) for e in entries if str(e.get("id")) == sys.argv[2]), ""))
+PY
+)
+    [ -n "$aid" ] && ok "cache:byid" "fetched again by key and ref — same entry, id $aid" \
+                  || bad "cache:byid" "the entry does not come back when asked for by its own key and ref"
+  else
+    warn "cache:byid" "the filtered query answered $acode"
+  fi
+
+  if [ "${size:-0}" -gt 1024 ]; then
+    ok "cache:size" "$(( size / 1024 )) KB stored"
+  else
+    bad "cache:size" "the entry holds ${size:-0} bytes — that is an empty cache"
   fi
 }
