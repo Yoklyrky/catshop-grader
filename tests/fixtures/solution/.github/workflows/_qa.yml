@@ -1,3 +1,5 @@
+# The QA stage: pull what was published, stand it up, drive it, take it down.
+# Every move is a step, because a stage nobody can read is a stage nobody debugs.
 on:
   workflow_call:
     inputs:
@@ -14,12 +16,37 @@ jobs:
         profile: ["", partner]
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - run: pip install -r lab-03/requirements-dev.txt
-      - run: bash lab-03/qa/run.sh
+
+      - name: pull the digest
+        run: docker pull "${{ inputs.image }}"
+
+      - name: up
         env:
           QA_IMAGE: ${{ inputs.image }}
+        run: |
+          docker compose -f lab-03/qa/compose.qa.yaml \
+            ${{ matrix.profile && format('--profile {0}', matrix.profile) || '' }} \
+            up -d --wait --wait-timeout 120
+
+      - name: drive it
+        env:
+          QA_BASE_URL: http://localhost:8080
           QA_PROFILE: ${{ matrix.profile }}
-      - run: echo "qa green" >> "$GITHUB_STEP_SUMMARY"
+        run: python -m pytest lab-03/qa -q --junitxml=lab-03/qa-report.xml
+
+      - name: down
+        if: always()
+        env:
+          QA_IMAGE: ${{ inputs.image }}
+        run: docker compose -f lab-03/qa/compose.qa.yaml down -v
+
+      - if: always()
+        run: echo "qa ${{ matrix.profile || 'no-partner' }} done" >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:

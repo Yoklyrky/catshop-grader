@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 #
-# section: aqa — bonus. The suite stops being a smoke test.
+# section: aqa — bonus. Scenarios of your own.
 #
-# The required qa section asks for a suite that runs and gates. This one asks
-# for the thing QA actually owns: cases that came from somewhere, including the
-# ones that only exist because something broke once.
+# The five scenarios in qa/test_smoke.py are given, so they are not graded here
+# and they do not count towards anything. This section is about the thing QA
+# actually owns: cases that came from somewhere, including the ones that only
+# exist because something broke once.
 
 WF=../.github/workflows
 ACT=../.github/actions
@@ -13,15 +14,21 @@ section_run() {
   sect "how much it covers"
   [ -d qa ] || { bad "aqa:suite" "no qa/ folder"; return; }
 
-  local n
-  n=$(grep -rhoE '^def test_[A-Za-z0-9_]+' qa/ 2>/dev/null | wc -l | tr -d ' ')
-  [ "${n:-0}" -ge 5 ] && ok "aqa:scenarios" "$n scenarios" \
-                      || bad "aqa:scenarios" "$n scenario(s) — five is the bar for this bonus"
+  # the five given scenarios do not count: this bonus is the ones you added
+  local own n
+  own=$(find qa -name 'test_*.py' ! -name 'test_smoke.py' 2>/dev/null)
+  if [ -z "$own" ]; then
+    bad "aqa:scenarios" "only the given test_smoke.py is here — this bonus is scenarios of your own, in your own file"
+    return
+  fi
+  n=$(grep -hoE '^def test_[A-Za-z0-9_]+' $own 2>/dev/null | wc -l | tr -d ' ')
+  [ "${n:-0}" -ge 3 ] && ok "aqa:scenarios" "$n scenario(s) of your own, beside the five you were given" \
+                      || bad "aqa:scenarios" "$n of your own — three is the bar, and the given five do not count"
 
-  if grep -rqE '== *(4[0-9][0-9]|5[0-9][0-9])|in *\( *4[0-9][0-9]|status_code *!= *200|raises' qa/ 2>/dev/null; then
-    ok "aqa:negative" "at least one case asserts a failure, not a success"
+  if grep -qE '== *(4[0-9][0-9]|5[0-9][0-9])|in *\( *4[0-9][0-9]|status_code *!= *200|raises' $own 2>/dev/null; then
+    ok "aqa:negative" "one of yours asserts a failure, not a success"
   else
-    bad "aqa:negative" "every case expects things to work — a suite that cannot see a 404 or a 502 is half a suite"
+    bad "aqa:negative" "every case of yours expects things to work — a suite that cannot see a 404 or a 502 is half a suite"
   fi
 
   sect "where the cases came from"

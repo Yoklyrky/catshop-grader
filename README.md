@@ -71,7 +71,7 @@ Both produce one named check per section. Pick whichever you prefer — **the ma
 
 | Input | Required | Default | Meaning |
 |---|---|---|---|
-| `section` | yes | — | lab 1: `dockerfile`, `hardening`, `compose`, `wiremock`, `networks` · lab 2: `tests`, `pipeline`, `published-image`, `cache` · lab 3: `reuse`, `cache`, `qa`, `aqa`, `concurrency` |
+| `section` | yes | — | lab 1: `dockerfile`, `hardening`, `compose`, `wiremock`, `networks` · lab 2: `tests`, `pipeline`, `published-image`, `cache` · lab 3: `reuse`, `cache` (required), `qa`, `aqa`, `concurrency` (bonus) |
 | `path` | no | the lab's own folder | the lab folder to grade |
 | `port` | no | `8080` | the host port the app must be published on |
 | `token` | no | `${{ github.token }}` | labs 2 and 3 — the checks that ask the Actions API what really happened. The calling job needs `permissions: actions: read` |
@@ -99,8 +99,8 @@ meaningless.
 | `cache` | a cache keyed on something that changes, **an entry the Actions cache API hands back by key and id**, not empty, and two timings in `CACHE.md` | 2 · bonus |
 | `reuse` | **one definition, called twice** — a workflow calling a workflow with typed inputs and an output coming back, a composite action inside it, the QA suite as a second reusable workflow, nothing pinned to a branch, and **a run whose job names carry the slash a reusable call leaves** | 3 · section 1 |
 | `cache` | both stores — dependencies **and** layers, `hashFiles` and `restore-keys`, `mode=max`, a Dockerfile ordered for it, the entries read back from the API, and **the two run URLs in `CACHE.md` checked against the runs' real durations** | 3 · section 2 |
-| `qa` | the AQA suite drives the app **over HTTP**, never imports it, reads its address from the environment, is handed a **digest**, and gates the promotion. Then the grader pulls that digest and **runs the student's own suite against it through the harness they were given** — `lab-03/qa/run.sh`, the same command their workflow calls. No `run.sh` means a bare container instead, and a warning saying so | 3 · section 3 |
-| `aqa` | five scenarios, one of them **negative**, a regression case with the incident written down, a matrix, and a report that leaves the runner | 3 · bonus |
+| `qa` | the **stage**, not the scenarios: the suite and `compose.qa.yaml` are given, so this grades the job around them — it pulls a **digest**, brings the given stack up (nothing in it may `build:`), the moves are readable steps rather than a wrapper script, the stack comes down, and the promotion is reachable only through it. Then the grader does the stage itself: pulls the digest from `published.txt`, `compose up --wait`, runs the suite, tears it down | 3 · bonus |
+| `aqa` | scenarios **of your own**, in your own file — the five given ones do not count — one of them negative, a regression case with the incident written down, a matrix, and a report that leaves the runner | 3 · bonus |
 | `concurrency` | a group keyed on the ref rather than a constant, `cancel-in-progress` that is not a bare `true`, and **a run the API confirms was really cancelled** | 3 · bonus |
 
 ### The checks that ask GitHub instead of reading a file
@@ -213,10 +213,12 @@ Every section was verified against a reference solution before release:
 no-volume compose variant correctly fails `persist:volume`, so the grader can fail as well as pass.
 
 Lab 3 ships with its reference solution and its counter-example **inside this repository**, under
-`tests/fixtures/`: `reuse` 18, `cache` 14, `qa` 14, `aqa` 12, `concurrency` 12, all clean on
-`solution`, and every section red with a stated cause on `broken`. Locally two things cannot be
-reached — `qa:pull` needs a real published digest, and the four API checks need a repository — which
-is what `tests/runs-api.sh` exists for.
+`tests/fixtures/`: `reuse` 18, `cache` 14, `aqa` 12, `concurrency` 12 clean on `solution`, and every
+section red with a stated cause on `broken`. The `qa` section was verified end to end against an
+image pushed to a local `registry:2` and pulled back **by digest** — 21 checks clean, nine scenarios
+green through `compose up --wait` — and it fails correctly for a student who skipped the bonus
+(`qa:job`), for a stack that builds instead of pulling (`qa:nobuild`), and for a red suite
+(`qa:runs`). The four API checks need a repository, which is what `tests/runs-api.sh` exists for.
 
 ## Layout
 

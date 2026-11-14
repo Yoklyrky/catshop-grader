@@ -4,8 +4,8 @@
 #     lab-03:
 #       uses: kse-ci-cd-basics-course/catshop-grader/.github/workflows/lab-03.yml@v1
 #       with:
-#         required: "reuse,cache,qa"
-#         bonus: "aqa,concurrency"
+#         required: "reuse,cache"
+#         bonus: "qa,aqa,concurrency"
 #
 # One job per section, via the matrix. One of these per lab: `uses:` cannot take
 # an expression, so a lab-agnostic workflow could not pick its action path.
@@ -23,12 +23,12 @@ on:
         description: "Comma-separated sections that must pass"
         required: false
         type: string
-        default: "reuse,cache,qa"
+        default: "reuse,cache"
       bonus:
         description: "Comma-separated sections that may fail without failing the lab"
         required: false
         type: string
-        default: "aqa,concurrency"
+        default: "qa,aqa,concurrency"
       port:
         description: "Host port the published image is run on"
         required: false

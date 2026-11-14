@@ -1,71 +1,58 @@
-# qa — the suite, and the harness that stands something up for it
+# qa — the suite, and the stack it drives
 
-Two of these three files are **given**. The suite is yours.
+Both of these are **given**. Nothing in this folder is yours to write unless you go for the second
+bonus.
 
-| File | | |
-|---|---|---|
-| `compose.qa.yaml` | given | the stack: the **pulled** image, Postgres, and the partner behind a profile |
-| `run.sh` | given | pull · up · wait · drive · tear down. Exit status is the suite's |
-| `test_*.py` | **yours** | the scenarios |
+| File | |
+|---|---|
+| `compose.qa.yaml` | the stack: the **pulled** image, Postgres behind a health gate, the partner behind a profile |
+| `test_smoke.py` | five scenarios that drive the app over HTTP — health, ready, the counter, a 404, and `/price` both ways |
 
-## Calling it from your QA workflow
+## Running it on your machine
 
-```yaml
-# .github/workflows/_qa.yml
-on:
-  workflow_call:
-    inputs:
-      image:
-        description: the digest to test
-        required: true
-        type: string
+```bash
+# whatever your pipeline published, by digest
+export QA_IMAGE=ghcr.io/you/catshop@sha256:...
 
-jobs:
-  qa:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: pip install -r lab-03/requirements-dev.txt
-      - run: bash lab-03/qa/run.sh
-        env:
-          QA_IMAGE: ${{ inputs.image }}
+docker compose -f lab-03/qa/compose.qa.yaml up -d --wait
+QA_BASE_URL=http://localhost:8080 python3 -m pytest lab-03/qa -q
+docker compose -f lab-03/qa/compose.qa.yaml down -v
 ```
 
-That is the whole call. `run.sh` prints what it is doing, writes a summary line when it is running
-in Actions, and leaves `lab-03/qa-report.xml` behind for you to upload.
+Three commands. That is the whole of what an AQA stage does, and the bonus is putting those three
+commands in a job with the digest coming from your build.
 
-## The knobs
+## The two things in here that are the lesson
+
+**The app service has no `build:`.** It cannot have one. Every compose file you have written so far
+built an image; this one pulls a digest, because an AQA run tests **what was published**, not what
+this machine can make a minute later. A wrong digest means nothing starts — which is the correct
+failure.
+
+**The partner is behind a profile, so by default it is absent** and `/price` answers `502`. Add
+`--profile partner` and the stub from `../partner/mappings/` answers properly. `QA_PROFILE` reaches
+the suite as an environment variable, so **one case asserts both outcomes** and the stack decides
+which applies:
+
+```bash
+docker compose -f lab-03/qa/compose.qa.yaml --profile partner up -d --wait
+QA_PROFILE=partner QA_BASE_URL=http://localhost:8080 python3 -m pytest lab-03/qa -q
+```
+
+That is the move lab 5 makes with three environments: same suite, different address, different
+expectations — and the suite is told which.
+
+## What the suite reads from the environment
 
 | variable | default | |
 |---|---|---|
-| `QA_IMAGE` | — | **required.** The image to test, as a **digest** |
-| `QA_PORT` | `8080` | the host port the stack is published on |
-| `QA_BASE_URL` | `http://localhost:$QA_PORT` | what your suite is pointed at — **read it from the environment** |
-| `QA_PROFILE` | unset | `partner` also starts the stubbed partner |
-| `QA_REPORT` | `lab-03/qa-report.xml` | junit output |
-| `QA_PYTHON` | `python3` | the interpreter that has `pytest` and `requests` |
-| `QA_KEEP` | unset | `1` leaves the stack up so you can poke it |
+| `QA_BASE_URL` | `http://localhost:8080` | the address to drive |
+| `QA_PROFILE` | unset | `partner` means the partner is up, so `/price` should answer `200` |
 
-## Two things in here are the lesson
+And what `compose.qa.yaml` reads:
 
-**The app service has no `build:`.** It cannot have one. Every compose file you have written so far
-built an image; this one pulls a digest, because an AQA run tests what was published, not what this
-machine can make. If the digest is wrong, nothing starts — which is the correct failure.
-
-**The partner is behind a profile, so by default it is absent** and `/price` answers `502`. A
-dependency that is not there is a case worth having, and it is the one your unit tests cannot see.
-`QA_PROFILE` reaches your suite as an environment variable, so one case can assert both outcomes
-and the stack decides which one applies — which is exactly the move lab 5 makes with three
-environments. Run it both ways:
-
-```bash
-QA_IMAGE=ghcr.io/you/catshop@sha256:... bash lab-03/qa/run.sh
-QA_IMAGE=ghcr.io/you/catshop@sha256:... QA_PROFILE=partner bash lab-03/qa/run.sh
-```
-
-Locally, point your suite at anything that answers — a container you started by hand, or the app
-running from your terminal:
-
-```bash
-QA_BASE_URL=http://localhost:8080 python3 -m pytest lab-03/qa -q
-```
+| variable | default | |
+|---|---|---|
+| `QA_IMAGE` | — | **required.** The image to test, as a digest |
+| `QA_PORT` | `8080` | the host port the app is published on |
+| `POSTGRES_PASSWORD` | `qa-only` | the database password for a throwaway stack |

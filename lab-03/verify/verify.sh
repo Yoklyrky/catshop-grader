@@ -9,8 +9,8 @@
 #
 #   reuse        one definition of test-and-build, called twice   section 1 · required
 #   cache        both stores, proved, and the minutes saved       section 2 · required
-#   qa           the suite, against the published image           section 3 · required
-#   aqa          scenarios, a negative case, a regression         bonus
+#   qa           the stage that drives the published digest       bonus
+#   aqa          scenarios of your own, beyond the given five     bonus
 #   concurrency  the group, and a run that was really cancelled   bonus
 #
 # Three checks here ask the Actions API rather than the YAML: a reusable call

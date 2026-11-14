@@ -1,5 +1,5 @@
 name: "Catshop lab 3 · verify"
-description: "Grade one section of lab 3 (reuse, caching, the QA suite) and report it as a named check."
+description: "Grade one section of lab 3 (reuse, caching, and the optional QA stage) and report it as a named check."
 author: "KSE · CI/CD and Cloud Deployment"
 
 inputs:
@@ -14,7 +14,7 @@ inputs:
     default: "lab-03"
   port:
     description: >-
-      The host port the published image is run on while the QA suite drives it.
+      The host port the QA stack publishes the app on while the suite drives it.
     required: false
     default: "8080"
   token:
