@@ -2,15 +2,26 @@ on:
   workflow_call:
     inputs:
       image:
+        description: the digest to test
         required: true
         type: string
 jobs:
   qa:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: ["", partner]
     steps:
       - uses: actions/checkout@v4
-      - run: docker run -d -p 8080:8080 "${{ inputs.image }}"
-      - env:
-          QA_BASE_URL: http://localhost:8080
-        run: python -m pytest lab-03/qa -q
+      - run: pip install -r lab-03/requirements-dev.txt
+      - run: bash lab-03/qa/run.sh
+        env:
+          QA_IMAGE: ${{ inputs.image }}
+          QA_PROFILE: ${{ matrix.profile }}
       - run: echo "qa green" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qa-report-${{ matrix.profile || 'no-partner' }}
+          path: lab-03/qa-report.xml

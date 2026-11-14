@@ -82,34 +82,53 @@ run_the_suite_against_the_published_image() {
   fi
   ok "qa:pull" "pulled from the registry"
 
-  if ! docker run -d --name "$IMG" -p "${PORT}:8080" "$ref" >/dev/null 2>&1; then
-    bad "qa:start" "the published image does not start"; docker logs "$IMG" 2>&1 | tail -10 >&2; return
-  fi
-  wait_up 60 && ok "qa:start" "it is up on $BASE" \
-              || { bad "qa:start" "no answer on $BASE/health after 60s"; docker logs "$IMG" 2>&1 | tail -10 >&2; return; }
-
+  # the suite's dependencies, in a venv of our own: the student's workflow
+  # installs them its own way, and we are not grading that here
   python3 -m venv /tmp/qa.$$ >/dev/null 2>&1
   local PY=/tmp/qa.$$/bin/python
-  if [ -f requirements-dev.txt ]; then
-    $PY -m pip install -q -r requirements-dev.txt >/tmp/qpip.$$ 2>&1
-  fi
+  [ -f requirements-dev.txt ] && $PY -m pip install -q -r requirements-dev.txt >/tmp/qpip.$$ 2>&1
   $PY -m pip install -q pytest requests >>/tmp/qpip.$$ 2>&1
   if ! $PY -c 'import pytest, requests' 2>/dev/null; then
     bad "qa:install" "the suite's dependencies do not install"; tail -10 /tmp/qpip.$$ >&2; return
   fi
   ok "qa:install" "the suite's dependencies install"
 
-  # every name the suite might read the address from, set to the same value
-  if QA_BASE_URL="$BASE" BASE_URL="$BASE" APP_URL="$BASE" APP_HOST="$BASE" \
-     $PY -m pytest qa -q >/tmp/qpt.$$ 2>&1; then
-    local n
-    n=$(grep -oE '[0-9]+ passed' /tmp/qpt.$$ | head -1 | grep -oE '[0-9]+')
-    ok "qa:runs" "${n:-?} scenario(s) green against the published image"
-    [ "${n:-0}" -ge 3 ] && ok "qa:count" "$n scenarios" \
-                        || warn "qa:count" "only ${n:-0} — three is the floor for a suite that gates a release"
+  # The harness is given, so use it: whatever the student's workflow does, this
+  # is the command it was given to call, and the suite has to pass under it.
+  if [ -x qa/run.sh ] || [ -f qa/run.sh ]; then
+    ok "qa:harness" "qa/run.sh is there — grading through it, as your workflow does"
+    QA_IMAGE="$ref" QA_PORT="$PORT" QA_PYTHON="$PY" QA_REPORT=/tmp/qa-report.$$.xml \
+      bash qa/run.sh >/tmp/qpt.$$ 2>&1
+    local rc=$?
+    if [ "$rc" -eq 0 ]; then
+      local n
+      n=$(grep -oE '[0-9]+ passed' /tmp/qpt.$$ | head -1 | grep -oE '[0-9]+')
+      ok "qa:runs" "${n:-?} scenario(s) green against the published image, through qa/run.sh"
+      [ "${n:-0}" -ge 3 ] && ok "qa:count" "$n scenarios" \
+                          || warn "qa:count" "only ${n:-0} — three is the floor for a suite that gates a release"
+    else
+      bad "qa:runs" "qa/run.sh exits $rc against the image your own pipeline published"
+      tail -25 /tmp/qpt.$$ >&2
+    fi
   else
-    bad "qa:runs" "the suite fails against the image your own pipeline published"
-    tail -20 /tmp/qpt.$$ >&2
+    warn "qa:harness" "no qa/run.sh — grading with a bare container instead of the stack you were given"
+    if ! docker run -d --name "$IMG" -p "${PORT}:8080" "$ref" >/dev/null 2>&1; then
+      bad "qa:start" "the published image does not start"; docker logs "$IMG" 2>&1 | tail -10 >&2; return
+    fi
+    wait_up 60 && ok "qa:start" "it is up on $BASE" \
+                || { bad "qa:start" "no answer on $BASE/health after 60s"; docker logs "$IMG" 2>&1 | tail -10 >&2; return; }
+
+    if QA_BASE_URL="$BASE" BASE_URL="$BASE" APP_URL="$BASE" APP_HOST="$BASE" \
+       $PY -m pytest qa -q >/tmp/qpt.$$ 2>&1; then
+      local n
+      n=$(grep -oE '[0-9]+ passed' /tmp/qpt.$$ | head -1 | grep -oE '[0-9]+')
+      ok "qa:runs" "${n:-?} scenario(s) green against the published image"
+      [ "${n:-0}" -ge 3 ] && ok "qa:count" "$n scenarios" \
+                          || warn "qa:count" "only ${n:-0} — three is the floor for a suite that gates a release"
+    else
+      bad "qa:runs" "the suite fails against the image your own pipeline published"
+      tail -20 /tmp/qpt.$$ >&2
+    fi
   fi
-  rm -rf /tmp/qa.$$ /tmp/qpip.$$ /tmp/qpt.$$ /tmp/pull.$$
+  rm -rf /tmp/qa.$$ /tmp/qpip.$$ /tmp/qpt.$$ /tmp/pull.$$ /tmp/qa-report.$$.xml
 }

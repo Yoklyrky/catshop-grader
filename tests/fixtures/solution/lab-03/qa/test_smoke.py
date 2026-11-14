@@ -2,6 +2,7 @@ import os
 import requests
 
 BASE = os.environ.get("QA_BASE_URL", "http://localhost:8080")
+PARTNER = os.environ.get("QA_PROFILE", "") == "partner"
 
 
 def test_health():
@@ -22,5 +23,11 @@ def test_unknown_route_is_404():
     assert requests.get(f"{BASE}/nope", timeout=5).status_code == 404
 
 
-def test_price_without_partner_is_502():
-    assert requests.get(f"{BASE}/price/MK-II", timeout=10).status_code == 502
+def test_price_depends_on_the_partner():
+    # the same case, both ways round: the suite is told which stack it is in
+    r = requests.get(f"{BASE}/price/MK-II", timeout=10)
+    if PARTNER:
+        assert r.status_code == 200
+        assert r.json()["price"]
+    else:
+        assert r.status_code == 502
