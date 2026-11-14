@@ -1,0 +1,42 @@
+on:
+  workflow_call:
+    inputs:
+      path:
+        required: true
+        type: string
+      image:
+        required: true
+        type: string
+      publish:
+        required: false
+        type: boolean
+        default: false
+    outputs:
+      image:
+        value: ${{ jobs.build.outputs.image }}
+    secrets:
+      REGISTRY_TOKEN:
+        required: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.out.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: ./.github/actions/install-and-test
+        with:
+          path: ${{ inputs.path }}
+      - run: python -m pytest ${{ inputs.path }}/tests -q
+      - uses: docker/build-push-action@v6
+        id: push
+        with:
+          push: ${{ inputs.publish }}
+          cache-from: type=gha,scope=app
+          cache-to: type=gha,scope=app,mode=max
+      - id: out
+        run: echo "image=${{ inputs.image }}@${{ steps.push.outputs.digest }}" >> "$GITHUB_OUTPUT"

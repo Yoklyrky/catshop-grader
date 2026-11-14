@@ -1,0 +1,27 @@
+name: lab-03
+on:
+  push:
+    paths: ["lab-03/**", ".github/workflows/lab-03.yml"]
+  pull_request:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+jobs:
+  build:
+    uses: ./.github/workflows/_build-and-test.yml
+    with:
+      path: lab-03
+      image: ghcr.io/student/catshop
+      publish: ${{ github.ref == 'refs/heads/main' }}
+    secrets: inherit
+  qa:
+    needs: build
+    uses: ./.github/workflows/_qa.yml
+    with:
+      image: ${{ needs.build.outputs.image }}
+  promote:
+    needs: qa
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "${{ needs.build.outputs.image }}" > lab-03/published.txt

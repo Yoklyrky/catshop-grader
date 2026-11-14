@@ -71,10 +71,10 @@ Both produce one named check per section. Pick whichever you prefer — **the ma
 
 | Input | Required | Default | Meaning |
 |---|---|---|---|
-| `section` | yes | — | lab 1: `dockerfile`, `hardening`, `compose`, `wiremock`, `networks` · lab 2: `tests`, `pipeline`, `published-image`, `cache` |
+| `section` | yes | — | lab 1: `dockerfile`, `hardening`, `compose`, `wiremock`, `networks` · lab 2: `tests`, `pipeline`, `published-image`, `cache` · lab 3: `reuse`, `cache`, `qa`, `aqa`, `concurrency` |
 | `path` | no | the lab's own folder | the lab folder to grade |
 | `port` | no | `8080` | the host port the app must be published on |
-| `token` | no | `${{ github.token }}` | lab 2 only — the `cache` section asks the Actions cache API which caches the repository really holds, so the calling job needs `permissions: actions: read` |
+| `token` | no | `${{ github.token }}` | labs 2 and 3 — the checks that ask the Actions API what really happened. The calling job needs `permissions: actions: read` |
 
 Outputs: `pass`, `fail`, `warn`, `score`. `fail` is zero when the section is clean.
 
@@ -97,12 +97,27 @@ meaningless.
 | `pipeline` | test → build → publish in one workflow, publishing **gated** behind the tests, no `latest`, revision labelled | 2 · section 2 |
 | `published-image` | the grader stops building and **pulls**: by digest, runs it, probes it, and checks the revision label names a commit in that repository | 2 · section 3 |
 | `cache` | a cache keyed on something that changes, **an entry the Actions cache API hands back by key and id**, not empty, and two timings in `CACHE.md` | 2 · bonus |
+| `reuse` | **one definition, called twice** — a workflow calling a workflow with typed inputs and an output coming back, a composite action inside it, the QA suite as a second reusable workflow, nothing pinned to a branch, and **a run whose job names carry the slash a reusable call leaves** | 3 · section 1 |
+| `cache` | both stores — dependencies **and** layers, `hashFiles` and `restore-keys`, `mode=max`, a Dockerfile ordered for it, the entries read back from the API, and **the two run URLs in `CACHE.md` checked against the runs' real durations** | 3 · section 2 |
+| `qa` | the AQA suite drives the app **over HTTP**, never imports it, reads its address from the environment, is handed a **digest**, and gates the promotion. Then the grader pulls that digest, starts it, and **runs the student's own suite against it** | 3 · section 3 |
+| `aqa` | five scenarios, one of them **negative**, a regression case with the incident written down, a matrix, and a report that leaves the runner | 3 · bonus |
+| `concurrency` | a group keyed on the ref rather than a constant, `cancel-in-progress` that is not a bare `true`, and **a run the API confirms was really cancelled** | 3 · bonus |
 
-`cache` is the one section that asks GitHub a question rather than reading a file. A `cache:` block
-that saved nothing is still perfect YAML, so the check lists `/repos/{owner}/{repo}/actions/caches`,
-takes the newest entry, asks for it **again by its own key and ref**, and requires the same id back
-with a non-trivial size. Without `actions: read` it reports a warning rather than a failure — it is
-a bonus section, and a missing permission is not a wrong answer.
+### The checks that ask GitHub instead of reading a file
+
+A `cache:` block that saved nothing is still perfect YAML. So is a reusable call that never ran, and
+so is a concurrency group that never cancelled anything. Four checks therefore ask the API:
+
+| Check | The question | The endpoint |
+|---|---|---|
+| `cache:byid` | does this entry exist, by its own key and ref? | `GET /actions/caches` |
+| `cache:runs` | did the two runs in `CACHE.md` really take what was written down? | `GET /actions/runs/{id}` |
+| `reuse:ran` | did a run's jobs come back named `<job> / <job>`? | `GET /actions/runs/{id}/jobs` |
+| `conc:proof` | is there a cancelled run on this branch? | `GET /actions/runs?status=cancelled` |
+
+Without `actions: read` each of them reports a **warning rather than a failure**: a missing
+permission is not a wrong answer. In lab 3 the lab's own workflow grants it, so the normal case is
+a mark.
 
 **Secret checks run in every section**, because a leaked credential is never bonus:
 
@@ -128,11 +143,23 @@ git clone https://github.com/kse-ci-cd-basics-course/catshop-grader
 bash catshop-grader/lab-01/verify/verify.sh --section compose --path lab-01
 ```
 
-The cache API path cannot be exercised by grading a folder, so it has its own harness with a stubbed
-`curl` and five payloads:
+The API paths cannot be exercised by grading a folder, so they have their own harnesses with a
+stubbed `curl`:
 
 ```bash
 for c in happy empty tiny noperm mismatch; do bash catshop-grader/tests/cache-api.sh "$c"; done
+for c in ran-happy ran-none ran-noslash noperm saved not-saved cancelled never-cancelled; do
+  bash catshop-grader/tests/runs-api.sh "$c"
+done
+```
+
+Lab 3 also reads **several workflow files at once** and resolves the reusable calls between them, so
+that graph has an assertion harness of its own, plus two whole-fixture runs:
+
+```bash
+bash catshop-grader/tests/reuse-graph.sh           # the verdicts on four fixtures
+bash catshop-grader/tests/sections.sh solution     # every section, correct solution
+bash catshop-grader/tests/sections.sh broken       # every section, a deliberately wrong one
 ```
 
 Flags: `--json` for machine-readable output, `--keep` to leave the stack running for inspection,
@@ -181,10 +208,15 @@ git tag -f v1 && git push -f origin v1
 Re-point `v1` only for fixes that make the grader *more correct*. A change that makes a previously
 passing solution fail mid-lab is a new tag, not a `v1` move.
 
-Every section was verified against the reference solutions in
-[`catshop-examples`](https://github.com/kse-ci-cd-basics-course/catshop-examples) before release:
+Every section was verified against a reference solution before release:
 `dockerfile` 17, `hardening` 15, `compose` 18, `wiremock` 12, `networks` 14 — all clean. The
 no-volume compose variant correctly fails `persist:volume`, so the grader can fail as well as pass.
+
+Lab 3 ships with its reference solution and its counter-example **inside this repository**, under
+`tests/fixtures/`: `reuse` 18, `cache` 14, `qa` 14, `aqa` 12, `concurrency` 12, all clean on
+`solution`, and every section red with a stated cause on `broken`. Locally two things cannot be
+reached — `qa:pull` needs a real published digest, and the four API checks need a repository — which
+is what `tests/runs-api.sh` exists for.
 
 ## Layout
 
@@ -203,5 +235,14 @@ lab-01/
         └── secrets.sh      runs in every section
 ```
 
-One folder per lab. Lab 2's checks will land in `lab-02/` beside this one, referenced as
-`catshop-grader/lab-02@v1` — same repository, same tag, no new repository per lab.
+One folder per lab, referenced as `catshop-grader/lab-NN@v1` — same repository, same tag, no new
+repository per lab. From lab 2 the shared plumbing moved to `common/{lib.sh,secrets.sh}`, and lab 3
+adds two files of its own:
+
+```
+lab-03/verify/
+├── api.sh              the Actions API, for the four checks YAML cannot answer
+└── read_workflows.py   every workflow at once, with the reusable calls resolved —
+                        a job whose body is `uses: ./.github/workflows/_x.yml`
+                        has that file's jobs as its body
+```

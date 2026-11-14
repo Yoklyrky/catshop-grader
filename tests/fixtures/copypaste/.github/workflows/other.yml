@@ -1,0 +1,8 @@
+name: other
+on: workflow_dispatch
+jobs:
+  again:
+    runs-on: ubuntu-latest
+    steps:
+      - run: pytest lab-03/tests
+      - run: docker build -t x .

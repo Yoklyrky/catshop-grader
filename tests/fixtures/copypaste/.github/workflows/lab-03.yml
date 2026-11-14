@@ -1,0 +1,17 @@
+name: lab-03
+on: push
+concurrency:
+  group: ci
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@main
+      - run: pytest lab-03/tests
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: pytest lab-03/tests
+      - run: docker build -t ghcr.io/x/y:latest .
+      - run: docker push ghcr.io/x/y:latest

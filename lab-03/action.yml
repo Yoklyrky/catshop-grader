@@ -1,0 +1,55 @@
+name: "Catshop lab 3 · verify"
+description: "Grade one section of lab 3 (reuse, caching, the QA suite) and report it as a named check."
+author: "KSE · CI/CD and Cloud Deployment"
+
+inputs:
+  section:
+    description: >-
+      Which section to grade: reuse | cache | qa | aqa | concurrency.
+    required: true
+  path:
+    description: >-
+      The lab folder to grade, relative to the repository root (e.g. lab-03).
+    required: false
+    default: "lab-03"
+  port:
+    description: >-
+      The host port the published image is run on while the QA suite drives it.
+    required: false
+    default: "8080"
+  token:
+    description: >-
+      A token with `actions: read`. Three checks ask the API what really
+      happened: a reusable call that ran, the caches, and a cancelled run.
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  pass:
+    description: "Number of checks that passed."
+    value: ${{ steps.verify.outputs.pass }}
+  fail:
+    description: "Number of checks that failed. Zero means the section is clean."
+    value: ${{ steps.verify.outputs.fail }}
+  warn:
+    description: "Number of judgement calls to explain in the pull request."
+    value: ${{ steps.verify.outputs.warn }}
+  score:
+    description: "Passed checks as a percentage of decided checks."
+    value: ${{ steps.verify.outputs.score }}
+
+runs:
+  using: composite
+  steps:
+    - name: "Grade section ${{ inputs.section }}"
+      id: verify
+      shell: bash
+      env:
+        PORT: ${{ inputs.port }}
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        # the secret checks read git history, not the working tree
+        git -C "$GITHUB_WORKSPACE" fetch --unshallow --quiet 2>/dev/null || true
+        bash "${{ github.action_path }}/verify/verify.sh" \
+          --section "${{ inputs.section }}" \
+          --path "${{ inputs.path }}"

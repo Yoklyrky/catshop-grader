@@ -1,0 +1,24 @@
+on:
+  workflow_call:
+    inputs:
+      image:
+        required: true
+        type: string
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        store: [file, postgres]
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker run -d -p 8080:8080 "${{ inputs.image }}"
+      - env:
+          QA_BASE_URL: http://localhost:8080
+        run: python -m pytest lab-03/qa -q
+      - run: echo "qa green" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qa-report-${{ matrix.store }}
+          path: lab-03/qa-report.xml

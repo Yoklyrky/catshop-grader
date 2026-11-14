@@ -1,0 +1,8 @@
+name: install-and-test
+inputs:
+  path: { required: true }
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: pip install -r ${{ inputs.path }}/requirements.txt
