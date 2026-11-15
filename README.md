@@ -140,27 +140,18 @@ asserted — which is the point. To run it by hand while authoring or debugging 
 
 ```bash
 git clone https://github.com/kse-ci-cd-basics-course/catshop-grader
-bash catshop-grader/lab-01/verify/verify.sh --section compose --path lab-01
+bash catshop-grader/lab-01/verify.sh --section compose --path lab-01
 ```
 
-The API paths cannot be exercised by grading a folder, so they have their own harnesses with a
-stubbed `curl`:
+Every test the graders have is one command:
 
 ```bash
-for c in happy empty tiny noperm mismatch; do bash catshop-grader/tests/cache-api.sh "$c"; done
-for c in ran-happy ran-none ran-noslash noperm saved not-saved cancelled never-cancelled; do
-  bash catshop-grader/tests/runs-api.sh "$c"
-done
+bash catshop-grader/tests/run.sh            # graph verdicts, whole sections, the curl stubs
+bash catshop-grader/tests/run.sh graph      # or one group at a time
 ```
 
-Lab 3 also reads **several workflow files at once** and resolves the reusable calls between them, so
-that graph has an assertion harness of its own, plus two whole-fixture runs:
-
-```bash
-bash catshop-grader/tests/reuse-graph.sh           # the verdicts on four fixtures
-bash catshop-grader/tests/sections.sh solution     # every section, correct solution
-bash catshop-grader/tests/sections.sh broken       # every section, a deliberately wrong one
-```
+It needs no network, no token and no registry. The API checks are covered with a stubbed `curl`,
+and the lab-3 sections run against a correct fixture and a deliberately wrong one.
 
 Flags: `--json` for machine-readable output, `--keep` to leave the stack running for inspection,
 `--port` to override the expected port. Exit status is zero when nothing failed.
@@ -222,20 +213,25 @@ green through `compose up --wait` — and it fails correctly for a student who s
 
 ## Layout
 
+**One file per lab.** Every section of a lab is a function in that lab's `verify.sh`, and the only
+other files are the shared plumbing and the two Python readers.
+
 ```
-lab-01/
-├── action.yml              the composite action students reference
-└── verify/
-    ├── verify.sh           entry point: flags, dispatch, report
-    ├── lib.sh              counters, output, and the two ways to start the app
-    └── sections/
-        ├── dockerfile.sh   section 1
-        ├── hardening.sh    section 2
-        ├── compose.sh      section 3
-        ├── wiremock.sh     bonus
-        ├── networks.sh     bonus
-        └── secrets.sh      runs in every section
+common/
+├── lib.sh                  counters, output, and the two ways to start the app
+└── secrets.sh              the checks that run in every section of every lab
+lab-01/{action.yml, verify.sh}
+lab-02/{action.yml, verify.sh, read_workflow.py}
+lab-03/{action.yml, verify.sh, read_workflows.py}
+tests/{run.sh, cache-api.sh, runs-api.sh, fixtures/}
 ```
+
+`read_workflow.py` answers *can publishing be reached when the tests are red*, and
+`read_workflows.py` answers the same across files with the reusable calls resolved. Both are Python
+because they are graph questions, and both are what a shell script would do badly.
+
+`LAB0N_LIB=1 . lab-0N/verify.sh` sources a grader without running anything, which is how the stub
+tests reach one function.
 
 One folder per lab, referenced as `catshop-grader/lab-NN@v1` — same repository, same tag, no new
 repository per lab. From lab 2 the shared plumbing moved to `common/{lib.sh,secrets.sh}`, and lab 3

@@ -13,8 +13,7 @@
 # mismatch  the id does not come back     -> FAIL cache:byid
 GR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 JSON=0; KEEP=0; PORT=8080
-. "$GR/common/lib.sh"
-. "$GR/lab-02/verify/sections/cache.sh"
+JSON=0 KEEP=0 PORT=8080 LAB02_LIB=1 . "$GR/lab-02/verify.sh"
 
 export GH_TOKEN=fake GITHUB_REPOSITORY=student/catshop-labs
 

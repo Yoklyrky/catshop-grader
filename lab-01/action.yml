@@ -46,6 +46,6 @@ runs:
         # single commit by default, which would make that check meaningless — so
         # deepen here rather than relying on every student remembering fetch-depth.
         git -C "$GITHUB_WORKSPACE" fetch --unshallow --quiet 2>/dev/null || true
-        bash "${{ github.action_path }}/verify/verify.sh" \
+        bash "${{ github.action_path }}/verify.sh" \
           --section "${{ inputs.section }}" \
           --path "${{ inputs.path }}"
