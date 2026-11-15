@@ -102,3 +102,4 @@ jobs:
           section: ${{ matrix.section }}
           path: ${{ inputs.path }}
           port: ${{ inputs.port }}
+          bonus: "true"

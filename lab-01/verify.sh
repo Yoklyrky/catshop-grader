@@ -11,12 +11,12 @@
 #   wiremock     the partner stub answers, and its 500 surfaces as a 502  bonus
 #   networks     internal: true holds, and the database has no egress     bonus
 #
-# Flags: --path DIR · --port N · --json · --keep
+# Flags: --path DIR · --port N · --json · --keep · --bonus
 # Exit 0 = nothing failed. A WARN is a judgement call for the pull request.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SECTION=""; WORKDIR=""; JSON="${JSON:-0}"; KEEP="${KEEP:-0}"
+SECTION=""; WORKDIR=""; JSON="${JSON:-0}"; KEEP="${KEEP:-0}"; BONUS=0
 LIB="${LAB01_LIB:-0}"      # 1 = only define the functions, for tests/run.sh
 
 if [ "$LIB" = 0 ]; then
@@ -27,6 +27,7 @@ while [ $# -gt 0 ]; do
     --port)    PORT="${2:?--port needs a value}";       shift 2 ;;
     --json)    JSON=1; shift ;;
     --keep)    KEEP=1; shift ;;
+    --bonus)   BONUS=1; shift ;;   # report, never fail: a bonus cannot cost marks
     -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
   esac
@@ -340,4 +341,8 @@ check_secrets                 # every section, always
 rm -f /tmp/b.$$ /tmp/cb.$$ /tmp/cu.$$
 
 emit_report "$SECTION"
+
+# A bonus section reports and exits clean: it can only ever add marks, so a red
+# one must not show up as a failed check.
+[ "$BONUS" = 1 ] && exit 0
 [ "$FAIL" -eq 0 ]

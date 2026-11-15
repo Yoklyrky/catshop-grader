@@ -24,6 +24,13 @@ inputs:
     required: false
     default: ${{ github.token }}
 
+  bonus:
+    description: >-
+      true for a bonus section: it still reports every check, but it cannot
+      fail the job, because a bonus can only add marks.
+    required: false
+    default: "false"
+
 outputs:
   pass:
     description: "Number of checks that passed."
@@ -52,4 +59,5 @@ runs:
         git -C "$GITHUB_WORKSPACE" fetch --unshallow --quiet 2>/dev/null || true
         bash "${{ github.action_path }}/verify.sh" \
           --section "${{ inputs.section }}" \
-          --path "${{ inputs.path }}"
+          --path "${{ inputs.path }}" \
+          ${{ inputs.bonus == 'true' && '--bonus' || '' }}

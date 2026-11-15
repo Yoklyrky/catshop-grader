@@ -35,8 +35,8 @@ jobs:
           path: lab-01
 ```
 
-Repeat the job for each section, changing `section:`. For a bonus section add
-`continue-on-error: true` to the job, and it reports without failing the build.
+Repeat the job for each section, changing `section:`. For a bonus section pass `bonus: "true"`:
+every check still reports, and the section cannot fail the job, because a bonus can only add marks.
 
 ### 2 · The reusable workflow — a whole lab in one call
 
@@ -74,6 +74,7 @@ Both produce one named check per section. Pick whichever you prefer — **the ma
 | `section` | yes | — | lab 1: `dockerfile`, `hardening`, `compose`, `wiremock`, `networks` · lab 2: `tests`, `pipeline`, `published-image`, `cache` · lab 3: `reuse`, `cache` (required), `qa`, `aqa`, `concurrency` (bonus) |
 | `path` | no | the lab's own folder | the lab folder to grade |
 | `port` | no | `8080` | the host port the app must be published on |
+| `bonus` | no | `false` | `"true"` for a bonus section: it reports every check and exits clean |
 | `token` | no | `${{ github.token }}` | labs 2 and 3 — the checks that ask the Actions API what really happened. The calling job needs `permissions: actions: read` |
 
 Outputs: `pass`, `fail`, `warn`, `score`. `fail` is zero when the section is clean.
@@ -181,6 +182,9 @@ section compose  17 pass  1 fail  0 warn
 - **FAIL** — costs marks. The message names the cause, not just the symptom.
 - **WARN** — a judgement call. Not a mark against you, but **explain it in the pull request**; an
   unexplained warning reads as an accident.
+
+A **bonus** section prints the same table and then exits clean, so a red bonus check does not
+exist: the worst it says is *N checks left on the table*.
 
 In CI the same table is written to the job summary, so you never have to read raw logs to find out
 what failed.

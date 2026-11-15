@@ -132,7 +132,8 @@ emit_report() {  # emit_report <section>
 
   if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
     {
-      printf '## section `%s` — %d pass · %d fail · %d warn\n\n' "$section" "$PASS" "$FAIL" "$WARN"
+      printf '## section `%s`%s — %d pass · %d fail · %d warn\n\n' \
+        "$section" "$([ "${BONUS:-0}" = 1 ] && printf ' (bonus)')" "$PASS" "$FAIL" "$WARN"
       printf '| | check | detail |\n|---|---|---|\n'
       for r in "${RESULTS[@]}"; do
         IFS='|' read -r st id msg <<<"$r"
@@ -160,7 +161,9 @@ emit_report() {  # emit_report <section>
   else
     log ""
     log "${B}section $section${N}  ${G}$PASS pass${N}  ${R}$FAIL fail${N}  ${Y}$WARN warn${N}"
-    if [ "$FAIL" -gt 0 ]; then
+    if [ "$FAIL" -gt 0 ] && [ "${BONUS:-0}" = 1 ]; then
+      log "${Y}Bonus section.${N} $FAIL check(s) left on the table — nothing here can cost you marks."
+    elif [ "$FAIL" -gt 0 ]; then
       log "${R}Not ready.${N} Fix the FAILs; warnings are judgement calls for the pull request."
     else
       log "${G}Section clean.${N}"
