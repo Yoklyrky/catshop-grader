@@ -50,6 +50,6 @@ runs:
       run: |
         # the secret checks read git history, not the working tree
         git -C "$GITHUB_WORKSPACE" fetch --unshallow --quiet 2>/dev/null || true
-        bash "${{ github.action_path }}/verify/verify.sh" \
+        bash "${{ github.action_path }}/verify.sh" \
           --section "${{ inputs.section }}" \
           --path "${{ inputs.path }}"

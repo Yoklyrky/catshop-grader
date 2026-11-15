@@ -15,8 +15,7 @@
 # never-cancelled  none                                        -> FAIL conc:proof
 GR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 JSON=0; KEEP=0; PORT=8080
-. "$GR/common/lib.sh"
-. "$GR/lab-03/verify/api.sh"
+JSON=0 KEEP=0 PORT=8080 LAB03_LIB=1 . "$GR/lab-03/verify.sh"
 
 export GH_TOKEN=fake GITHUB_REPOSITORY=student/catshop-labs GITHUB_REF_NAME=lab-03 GITHUB_WORKFLOW=lab-03
 
@@ -55,11 +54,8 @@ curl() {
 
 cd "$GR/tests/fixtures/solution/lab-03" || exit 2
 case "$1" in
-  ran-happy|ran-none|ran-noslash|noperm)
-    . "$GR/lab-03/verify/sections/reuse.sh"; it_really_ran ;;
-  saved|not-saved)
-    . "$GR/lab-03/verify/sections/cache.sh"; measured ;;
-  cancelled|never-cancelled)
-    . "$GR/lab-03/verify/sections/concurrency.sh"; written_down; it_really_cancelled ;;
+  ran-happy|ran-none|ran-noslash|noperm) it_really_ran ;;
+  saved|not-saved)                       measured ;;
+  cancelled|never-cancelled)             written_down; it_really_cancelled ;;
 esac
 echo "--- pass=$PASS fail=$FAIL warn=$WARN"
