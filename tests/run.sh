@@ -5,6 +5,7 @@
 #   ./tests/run.sh              everything
 #   ./tests/run.sh graph        the workflow analyser's verdicts on the fixtures
 #   ./tests/run.sh sections     every lab-3 section, on the good fixture and the bad one
+#   ./tests/run.sh lab2         lab 2 grades the student's pipeline, not an earlier lab's
 #   ./tests/run.sh api          the checks that call GitHub, with curl stubbed
 #
 # Nothing here needs a network, a token or a registry. Two things therefore
@@ -64,6 +65,61 @@ sections() {
   done
 }
 
+# ── lab 2 picks the right workflow when an earlier lab's is still there ──────
+# The bug: `head -1` over the files that mention docker graded lab-01.yml, so a
+# correct lab-2 pipeline was told it had no stages. Reported 2026-11-15.
+lab2pipeline() {
+  echo "== lab 2 · which workflow gets graded"
+  local work out
+  work="$(mktemp -d)"
+  mkdir -p "$work/.github/workflows" "$work/lab-02"
+  cat > "$work/.github/workflows/lab-01.yml" <<'YML'
+name: lab 1
+on: [push]
+jobs:
+  containers:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: docker build -t catshop:lab1 lab-01
+      - run: docker run --rm catshop:lab1 true
+YML
+  cat > "$work/.github/workflows/publish-lab-02.yml" <<'YML'
+name: lab 2
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: pytest lab-02/tests -q
+  build:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - run: docker build -t app lab-02
+  publish:
+    needs: [test, build]
+    runs-on: ubuntu-24.04
+    steps:
+      - run: docker push ghcr.io/me/catshop@${{ github.sha }}
+      - run: echo org.opencontainers.image.revision=${{ github.sha }}
+YML
+  cat > "$work/.github/workflows/lab-02-grading.yml" <<'YML'
+name: grading
+on: [push]
+jobs:
+  pipeline:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: kse-ci-cd-basics-course/catshop-grader/lab-02@v1
+        with: { section: pipeline }
+YML
+  out=$( cd "$work" && bash "$GR/lab-02/verify.sh" --section pipeline --path lab-02 2>/dev/null )
+  grep -q 'grading publish-lab-02.yml' <<<"$out"     && ok "graded publish-lab-02.yml, not lab-01.yml"     || fail "graded the wrong file: $(grep -m1 'pipeline:file' <<<"$out")"
+  grep -qE 'pipeline:(test|build|publish|gate)[^|]*FAIL' <<<"$out"     && fail "the three stages or the gate came out red on a correct pipeline"     || ok "the stages and the gate are read off the right file"
+  grep -q 'catshop-grader' <<<"$(grep -m1 'pipeline:file' <<<"$out")"     && fail "it graded the course's own grading workflow"     || ok "the grading workflow was skipped as a candidate"
+  rm -rf "$work"
+}
+
 # ── the four API checks, and lab 2's, with curl stubbed ──────────────────────
 api() {
   echo "== api"
@@ -82,9 +138,10 @@ api() {
 case "${1:-all}" in
   graph)    graph ;;
   sections) sections ;;
+  lab2)     lab2pipeline ;;
   api)      api ;;
-  all)      graph; sections; api ;;
-  *) echo "usage: run.sh [graph|sections|api]" >&2; exit 2 ;;
+  all)      graph; sections; lab2pipeline; api ;;
+  *) echo "usage: run.sh [graph|sections|lab2|api]" >&2; exit 2 ;;
 esac
 
 echo

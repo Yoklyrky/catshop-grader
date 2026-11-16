@@ -123,17 +123,47 @@ section_tests() {
 
 section_pipeline() {
   sect "the workflow exists"
-  local wfs wf report
+  local wfs wf f n report best best_report
   wfs=$(ls ../.github/workflows/*.yml ../.github/workflows/*.yaml 2>/dev/null)
   [ -n "$wfs" ] || { bad "pipeline:file" "no workflow under .github/workflows/"; return; }
 
-  wf=$(grep -l "ghcr.io\|docker" $wfs 2>/dev/null | head -1)
-  wf="${wf:-$(echo "$wfs" | head -1)}"
-  ok "pipeline:file" "grading $(basename "$wf")"
+  # Grade the workflow that comes CLOSEST to what this section asks for, not the
+  # first file that happens to say "docker": an earlier lab's workflow is still
+  # in the repository, still mentions docker, and used to win on `head -1`.
+  # Reported by Viktoriia Semenko, 2026-11-15.
+  # The course's own grading workflows are never candidates.
+  best=-1; n=0
+  for f in $wfs; do
+    grep -q 'catshop-grader' "$f" && continue
+    n=$((n + 1))
+    report=$(python3 "$HERE/read_workflow.py" "$f" 2>/dev/null) || continue
+    [ -n "$report" ] || continue
+    local score=0
+    [ -n "$(sed -n 's/^TESTS //p'  <<<"$report")" ] && score=$((score + 1))
+    [ -n "$(sed -n 's/^BUILDS //p' <<<"$report")" ] && score=$((score + 1))
+    [ -n "$(sed -n 's/^PUSHES //p' <<<"$report")" ] && score=$((score + 1))
+    grep -q '^GATED yes' <<<"$report" && score=$((score + 2))
+    grep -q '^GHCR yes'  <<<"$report" && score=$((score + 1))
+    if [ "$score" -gt "$best" ]; then best=$score; wf="$f"; best_report="$report"; fi
+  done
 
-  report=$(python3 "$HERE/read_workflow.py" "$wf" 2>/tmp/wf.$$)
-  if [ -z "$report" ]; then
-    bad "pipeline:parses" "it does not parse as YAML"; head -3 /tmp/wf.$$ >&2; return
+  if [ "$n" -eq 0 ]; then
+    bad "pipeline:file" "the only workflows here are the course's grading ones — where is yours?"
+    return
+  fi
+  if [ "$best" -lt 0 ]; then
+    wf=$(for f in $wfs; do grep -q 'catshop-grader' "$f" || { echo "$f"; break; }; done)
+    ok  "pipeline:file" "grading $(basename "$wf")"
+    bad "pipeline:parses" "it does not parse as YAML"
+    python3 "$HERE/read_workflow.py" "$wf" 2>&1 >/dev/null | head -3 >&2
+    return
+  fi
+
+  report="$best_report"
+  if [ "$n" -gt 1 ]; then
+    ok "pipeline:file" "grading $(basename "$wf") — the closest of $n workflows"
+  else
+    ok "pipeline:file" "grading $(basename "$wf")"
   fi
   ok "pipeline:parses" "it is valid YAML"
 

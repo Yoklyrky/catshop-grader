@@ -48,6 +48,14 @@ outputs:
 runs:
   using: composite
   steps:
+    # The grader pins its own Python. `ubuntu-latest` moved to 26.04, whose system
+    # Python is 3.14, and the lab's psycopg[binary]==3.2.3 has no wheel for it — so
+    # the suite never ran and the student was told their dependencies do not install.
+    # Reported by Viktoriia Semenko, 2026-11-15.
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
     - name: "Grade section ${{ inputs.section }}"
       id: verify
       shell: bash
